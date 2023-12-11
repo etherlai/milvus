@@ -16,7 +16,10 @@
 
 package meta
 
-import "github.com/milvus-io/milvus/internal/querycoordv2/session"
+import (
+	"github.com/milvus-io/milvus/internal/querycoordv2/k8s"
+	"github.com/milvus-io/milvus/internal/querycoordv2/session"
+)
 
 type Meta struct {
 	*CollectionManager
@@ -28,10 +31,12 @@ func NewMeta(
 	idAllocator func() (int64, error),
 	store Store,
 	nodeMgr *session.NodeManager,
+
 ) *Meta {
+	k8sInfoeMgr := k8s.NewK8sInfoManager()
 	return &Meta{
 		NewCollectionManager(store),
 		NewReplicaManager(idAllocator, store),
-		NewResourceManager(store, nodeMgr),
+		NewResourceManager(store, nodeMgr, k8sInfoeMgr),
 	}
 }

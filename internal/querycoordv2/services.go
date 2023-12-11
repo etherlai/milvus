@@ -1025,7 +1025,7 @@ func (s *Server) CreateResourceGroup(ctx context.Context, req *milvuspb.CreateRe
 		return status, nil
 	}
 
-	err := s.meta.ResourceManager.AddResourceGroup(req.GetResourceGroup())
+	err := s.meta.ResourceManager.AddResourceGroup(req.GetResourceGroup(), req.NodeSelector)
 	if err != nil {
 		log.Warn(ErrCreateResourceGroupFailed.Error(), zap.Error(err))
 		return utils.WrapStatus(commonpb.ErrorCode_UnexpectedError, ErrCreateResourceGroupFailed.Error(), err), nil
@@ -1267,6 +1267,7 @@ func (s *Server) DescribeResourceGroup(ctx context.Context, req *querypb.Describ
 		NumLoadedReplica: loadedReplicas,
 		NumOutgoingNode:  outgoingNodes,
 		NumIncomingNode:  incomingNodes,
+		NodeSelector:     rg.GetNodeSelector(),
 	}
 	return resp, nil
 }

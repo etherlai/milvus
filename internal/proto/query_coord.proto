@@ -528,6 +528,7 @@ message ResourceGroup {
   string name = 1;
   int32 capacity = 2;
   repeated int64 nodes = 3;
+  map<string, string> node_selector = 4;
 }
 
 // transfer `replicaNum` replicas in `collectionID` from `source_resource_group` to `target_resource_groups`
@@ -559,4 +560,5 @@ message ResourceGroupInfo {
   map<int64, int32> num_outgoing_node = 5;
    // collection id -> be accessed node num by other rg
   map<int64, int32> num_incoming_node = 6;
+  map<string, string> node_selector = 7;
 }
