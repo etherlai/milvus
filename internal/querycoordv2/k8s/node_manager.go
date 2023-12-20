@@ -33,7 +33,7 @@ func (k *K8sInfoManager) GetAllQueryNodes() ([]*QueryNodeK8sInfo, error) {
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	qns := make([]*QueryNodeK8sInfo, 0)
-	if err := json.Unmarshal(body, qns); err != nil {
+	if err := json.Unmarshal(body, &qns); err != nil {
 		return nil, err
 	}
 	return qns, nil

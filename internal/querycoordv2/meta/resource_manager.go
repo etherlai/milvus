@@ -540,8 +540,10 @@ func (rm *ResourceManager) TransferNode(from string, to string, numNode int) ([]
 		//if len(rm.groups[from].nodes) < numNode {
 		//	return nil, ErrNodeNotEnough
 		//}
+		log.Info("start get availableNodes without selector")
 		availableNodes = rm.groups[from].GetNodes()
 	} else {
+		log.Info("start get availableNodes with selector")
 		nodesK8sInfo, err := rm.k8sInfoeMgr.GetAllQueryNodes()
 		if err != nil {
 			return nil, err
@@ -554,14 +556,16 @@ func (rm *ResourceManager) TransferNode(from string, to string, numNode int) ([]
 			nodeInfo := rm.nodeMgr.Get(node)
 			if nodeK8sInfo, ok := nodeK8sInfoMap[nodeInfo.Addr()]; ok {
 				toNodeSelector := rm.groups[to].GetNodeSelector()
+				nodeSelector := nodeK8sInfo.Selectors
 				match := true
-				for k, v := range nodeK8sInfo.Selectors {
-					if _, ok2 := toNodeSelector[k]; !ok2 || v != toNodeSelector[k] {
+				for k, v := range toNodeSelector {
+					if _, ok2 := nodeSelector[k]; !ok2 || v != nodeSelector[k] {
 						match = false
 						break
 					}
 				}
 				if match {
+					log.Info("select nodeK8sInfo", zap.String("PodName", nodeK8sInfo.PodName))
 					availableNodes = append(availableNodes, node)
 				}
 			}
