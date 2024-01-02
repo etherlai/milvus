@@ -478,6 +478,10 @@ func (s *Server) CreateCredential(ctx context.Context, request *internalpb.Crede
 	return s.rootCoord.CreateCredential(ctx, request)
 }
 
+func (s *Server) BindUserResourceGroups(ctx context.Context, request *internalpb.CredentialInfo) (*commonpb.Status, error) {
+	return s.rootCoord.BindUserResourceGroups(ctx, request)
+}
+
 func (s *Server) GetCredential(ctx context.Context, request *rootcoordpb.GetCredentialRequest) (*rootcoordpb.GetCredentialResponse, error) {
 	return s.rootCoord.GetCredential(ctx, request)
 }
@@ -488,6 +492,10 @@ func (s *Server) UpdateCredential(ctx context.Context, request *internalpb.Crede
 
 func (s *Server) DeleteCredential(ctx context.Context, request *milvuspb.DeleteCredentialRequest) (*commonpb.Status, error) {
 	return s.rootCoord.DeleteCredential(ctx, request)
+}
+
+func (s *Server) DeleteUsersRG(ctx context.Context, request *internalpb.DeleteUsersRGRequest) (*commonpb.Status, error) {
+	return s.rootCoord.DeleteUsersRG(ctx, request)
 }
 
 func (s *Server) ListCredUsers(ctx context.Context, request *milvuspb.ListCredUsersRequest) (*milvuspb.ListCredUsersResponse, error) {

@@ -594,6 +594,60 @@ func (node *Proxy) LoadCollection(ctx context.Context, request *milvuspb.LoadCol
 		return unhealthyStatus(), nil
 	}
 
+	username, err := GetCurUserFromContext(ctx)
+	if err != nil {
+		log.Error("GetCurUserFromContext fail", zap.Error(err))
+		return &commonpb.Status{
+			ErrorCode: commonpb.ErrorCode_UnexpectedError,
+			Reason:    err.Error(),
+		}, nil
+	} else {
+		log.Info("LoadCollection user", zap.String("username", username))
+	}
+
+	// TODO(wys) Only root users are allowed to load with any resource group
+	if username != util.UserRoot {
+		// check if assign rgs
+		if len(request.ResourceGroups) == 0 {
+			errMsg := fmt.Sprintf("permission deny, user needs to assign the resource group, username: %s", username)
+			log.Error(errMsg)
+			return &commonpb.Status{
+				ErrorCode: commonpb.ErrorCode_PermissionDenied,
+				Reason:    errMsg,
+			}, nil
+		}
+		// get user rgs info
+		credInfo, credErr := globalMetaCache.GetCredentialRGsInfo(ctx, username)
+		if credErr != nil {
+			log.Error("GetCredentialRGsInfo fail", zap.Error(err))
+			return &commonpb.Status{
+				ErrorCode: commonpb.ErrorCode_UnexpectedError,
+				Reason:    credErr.Error(),
+			}, nil
+		}
+		// check rgs
+		if credInfo.ResourceGroups == nil {
+			errMsg := fmt.Sprintf("user resource group is null, please bind resource group for user, username: %s", username)
+			log.Error(errMsg)
+			return &commonpb.Status{
+				ErrorCode: commonpb.ErrorCode_UnexpectedError,
+				Reason:    errMsg,
+			}, nil
+		}
+		// match rgs
+		for _, rg := range request.ResourceGroups {
+			_, ok := credInfo.ResourceGroups[rg]
+			if !ok {
+				errMsg := fmt.Sprintf("permission deny, user doesn't have permissions for the resource group, username: %s, resource group: %s", username, rg)
+				log.Error(errMsg)
+				return &commonpb.Status{
+					ErrorCode: commonpb.ErrorCode_PermissionDenied,
+					Reason:    errMsg,
+				}, nil
+			}
+		}
+	}
+
 	sp, ctx := trace.StartSpanFromContextWithOperationName(ctx, "Proxy-LoadCollection")
 	defer sp.Finish()
 	traceID, _, _ := trace.InfoFromSpan(sp)
@@ -4578,6 +4632,55 @@ func (node *Proxy) UpdateCredentialCache(ctx context.Context, request *proxypb.U
 	}, nil
 }
 
+func (node *Proxy) UpdateCredentialRGsCache(ctx context.Context, request *proxypb.UpdateCredCacheRGsRequest) (*commonpb.Status, error) {
+	ctx = logutil.WithModule(ctx, moduleName)
+	logutil.Logger(ctx).Info("received request to update credential rgs cache",
+		zap.String("role", typeutil.ProxyRole),
+		zap.String("username", request.Username))
+	if !node.checkHealthy() {
+		return unhealthyStatus(), nil
+	}
+
+	credInfo := &internalpb.CredentialInfo{
+		Username:       request.Username,
+		ResourceGroups: request.ResourceGroups,
+	}
+	if globalMetaCache != nil {
+		globalMetaCache.UpdateCredentialRGs(credInfo) // no need to return error, though credential may be not cached
+	}
+	logutil.Logger(ctx).Info("complete to update credential rgs cache",
+		zap.String("role", typeutil.ProxyRole),
+		zap.String("username", request.Username))
+
+	return &commonpb.Status{
+		ErrorCode: commonpb.ErrorCode_Success,
+		Reason:    "",
+	}, nil
+}
+
+func (node *Proxy) DeleteCredentialsRGCache(ctx context.Context, request *proxypb.DeleteCredentialsRGRequest) (*commonpb.Status, error) {
+	ctx = logutil.WithModule(ctx, moduleName)
+	logutil.Logger(ctx).Info("received request to delete credentials rg cache",
+		zap.String("role", typeutil.ProxyRole),
+		zap.String("resource group", request.ResourceGroup))
+	if !node.checkHealthy() {
+		return unhealthyStatus(), nil
+	}
+
+	if globalMetaCache != nil {
+		globalMetaCache.DeleteCredentialsRG(request.ResourceGroup) // no need to return error, though credential may be not cached
+	}
+	logutil.Logger(ctx).Info("complete to delete credentials rg cache",
+		zap.String("role", typeutil.ProxyRole),
+		zap.String("resource group", request.ResourceGroup))
+
+	return &commonpb.Status{
+		ErrorCode: commonpb.ErrorCode_Success,
+		Reason:    "",
+	}, nil
+
+}
+
 func (node *Proxy) CreateCredential(ctx context.Context, req *milvuspb.CreateCredentialRequest) (*commonpb.Status, error) {
 	log.Info("CreateCredential", zap.String("role", typeutil.ProxyRole), zap.String("username", req.Username))
 	if !node.checkHealthy() {
@@ -4619,10 +4722,93 @@ func (node *Proxy) CreateCredential(ctx context.Context, req *milvuspb.CreateCre
 		Username:          req.Username,
 		EncryptedPassword: encryptedPassword,
 		Sha256Password:    crypto.SHA256(rawPassword, req.Username),
+		ResourceGroups:    make(map[string]string),
 	}
 	result, err := node.rootCoord.CreateCredential(ctx, credInfo)
 	if err != nil { // for error like conntext timeout etc.
 		log.Error("create credential fail", zap.String("username", req.Username), zap.Error(err))
+		return &commonpb.Status{
+			ErrorCode: commonpb.ErrorCode_UnexpectedError,
+			Reason:    err.Error(),
+		}, nil
+	}
+	return result, err
+}
+
+func (node *Proxy) BindUserResourceGroups(ctx context.Context, req *milvuspb.BindUserRGsRequest) (*commonpb.Status, error) {
+	log.Info("BindUserResourceGroups", zap.String("role", typeutil.ProxyRole), zap.String("username", req.Username))
+	if !node.checkHealthy() {
+		return unhealthyStatus(), nil
+	}
+	// check if context user is root
+	ctxUser, _ := GetCurUserFromContext(ctx)
+	if ctxUser != util.UserRoot {
+		errMsg := fmt.Sprintf("only the root user has bind user rgs permissions, username: %s", ctxUser)
+		log.Error(errMsg)
+		return &commonpb.Status{
+			ErrorCode: commonpb.ErrorCode_IllegalArgument,
+			Reason:    errMsg,
+		}, nil
+	}
+
+	// validate params
+	username := req.Username
+	if err := ValidateUsername(username); err != nil {
+		return &commonpb.Status{
+			ErrorCode: commonpb.ErrorCode_IllegalArgument,
+			Reason:    err.Error(),
+		}, nil
+	}
+
+	// check if resource groups is null
+	if req.ResourceGroups == nil || len(req.ResourceGroups) == 0 {
+		errMsg := fmt.Sprintf("resource groups can not be null, username: %s", username)
+		log.Error(errMsg)
+		return &commonpb.Status{
+			ErrorCode: commonpb.ErrorCode_IllegalArgument,
+			Reason:    errMsg,
+		}, nil
+	}
+
+	// check if rg exist
+	for _, rg := range req.ResourceGroups {
+		resp, err := node.queryCoord.DescribeResourceGroup(ctx, &querypb.DescribeResourceGroupRequest{
+			ResourceGroup: rg,
+		})
+		if resp.Status.ErrorCode != commonpb.ErrorCode_Success || err != nil {
+			log.Error("BindUserResourceGroups get rg info fail", zap.String("username", req.Username), zap.Error(err))
+			return &commonpb.Status{
+				ErrorCode: commonpb.ErrorCode_UnexpectedError,
+				Reason:    err.Error(),
+			}, nil
+		}
+		if resp.ResourceGroup.Name != rg {
+			log.Error("BindUserResourceGroups get rg name fail", zap.String("username", req.Username),
+				zap.String("etcd rg name", resp.ResourceGroup.Name),
+				zap.String("bind rg name", rg))
+			return &commonpb.Status{
+				ErrorCode: commonpb.ErrorCode_UnexpectedError,
+				Reason:    err.Error(),
+			}, nil
+		} else {
+			log.Info("BindUserResourceGroups get rg name", zap.String("rg", rg))
+		}
+	}
+
+	// convert rg list to rg map
+	rgs := req.ResourceGroups
+	rgsMap := make(map[string]string)
+	for _, rg := range rgs {
+		rgsMap[rg] = rg
+	}
+
+	credInfo := &internalpb.CredentialInfo{
+		Username:       req.Username,
+		ResourceGroups: rgsMap,
+	}
+	result, err := node.rootCoord.BindUserResourceGroups(ctx, credInfo)
+	if err != nil { // for error like context timeout etc.
+		log.Error("bind credential rgs fail", zap.String("username", req.Username), zap.Error(err))
 		return &commonpb.Status{
 			ErrorCode: commonpb.ErrorCode_UnexpectedError,
 			Reason:    err.Error(),
@@ -5258,12 +5444,12 @@ func (node *Proxy) DropResourceGroup(ctx context.Context, request *milvuspb.Drop
 		Condition:                NewTaskCondition(ctx),
 		DropResourceGroupRequest: request,
 		queryCoord:               node.queryCoord,
+		rootCoord:                node.rootCoord,
 	}
 
 	log := log.Ctx(ctx).With(
 		zap.String("role", typeutil.ProxyRole),
 	)
-
 	log.Debug("DropResourceGroup received")
 
 	if err := node.sched.ddQueue.Enqueue(t); err != nil {
@@ -5284,7 +5470,6 @@ func (node *Proxy) DropResourceGroup(ctx context.Context, request *milvuspb.Drop
 			zap.Uint64("EndTS", t.EndTs()))
 		return getErrResponse(err, method), nil
 	}
-
 	log.Debug("DropResourceGroup done",
 		zap.Uint64("BeginTS", t.BeginTs()),
 		zap.Uint64("EndTS", t.EndTs()))

@@ -16,6 +16,8 @@ service Proxy {
 
   rpc InvalidateCredentialCache(InvalidateCredCacheRequest) returns (common.Status) {}
   rpc UpdateCredentialCache(UpdateCredCacheRequest) returns (common.Status) {}
+  rpc UpdateCredentialRGsCache(UpdateCredCacheRGsRequest) returns (common.Status) {}
+  rpc DeleteCredentialsRGCache(DeleteCredentialsRGRequest) returns (common.Status) {}
 
   rpc RefreshPolicyInfoCache(RefreshPolicyInfoCacheRequest) returns (common.Status) {}
   rpc GetProxyMetrics(milvus.GetMetricsRequest) returns (milvus.GetMetricsResponse) {}
@@ -44,6 +46,18 @@ message UpdateCredCacheRequest {
   string username = 2;
   // password stored in cache
   string password = 3;
+}
+
+message UpdateCredCacheRGsRequest {
+  common.MsgBase base = 1;
+  string username = 2;
+  // resource_groups stored in cache
+  map<string, string> resource_groups = 3;
+}
+
+message DeleteCredentialsRGRequest {
+  common.MsgBase base = 1;
+  string resource_group = 2;
 }
 
 message RefreshPolicyInfoCacheRequest {

@@ -675,6 +675,19 @@ func (c *Client) CreateCredential(ctx context.Context, req *internalpb.Credentia
 	return ret.(*commonpb.Status), err
 }
 
+func (c *Client) BindUserResourceGroups(ctx context.Context, req *internalpb.CredentialInfo) (*commonpb.Status, error) {
+	ret, err := c.grpcClient.ReCall(ctx, func(client rootcoordpb.RootCoordClient) (any, error) {
+		if !funcutil.CheckCtxValid(ctx) {
+			return nil, ctx.Err()
+		}
+		return client.BindUserResourceGroups(ctx, req)
+	})
+	if err != nil || ret == nil {
+		return nil, err
+	}
+	return ret.(*commonpb.Status), err
+}
+
 func (c *Client) GetCredential(ctx context.Context, req *rootcoordpb.GetCredentialRequest) (*rootcoordpb.GetCredentialResponse, error) {
 	req = typeutil.Clone(req)
 	commonpbutil.UpdateMsgBase(
@@ -717,6 +730,19 @@ func (c *Client) DeleteCredential(ctx context.Context, req *milvuspb.DeleteCrede
 			return nil, ctx.Err()
 		}
 		return client.DeleteCredential(ctx, req)
+	})
+	if err != nil || ret == nil {
+		return nil, err
+	}
+	return ret.(*commonpb.Status), err
+}
+
+func (c *Client) DeleteUsersRG(ctx context.Context, req *internalpb.DeleteUsersRGRequest) (*commonpb.Status, error) {
+	ret, err := c.grpcClient.ReCall(ctx, func(client rootcoordpb.RootCoordClient) (any, error) {
+		if !funcutil.CheckCtxValid(ctx) {
+			return nil, ctx.Err()
+		}
+		return client.DeleteUsersRG(ctx, req)
 	})
 	if err != nil || ret == nil {
 		return nil, err

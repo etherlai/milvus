@@ -561,4 +561,5 @@ message ResourceGroupInfo {
    // collection id -> be accessed node num by other rg
   map<int64, int32> num_incoming_node = 6;
   map<string, string> node_selector = 7;
+  repeated int64 nodes = 8;
 }

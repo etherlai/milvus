@@ -474,6 +474,7 @@ type IndexCoordComponent interface {
 }
 
 // RootCoord is the interface `rootcoord` package implements
+//
 //go:generate mockery --name=RootCoord  --output=../mocks --filename=mock_rootcoord.go --with-expecter
 type RootCoord interface {
 	Component
@@ -815,10 +816,14 @@ type RootCoord interface {
 
 	// CreateCredential create new user and password
 	CreateCredential(ctx context.Context, req *internalpb.CredentialInfo) (*commonpb.Status, error)
+	// BindUserResourceGroups rootcoord bind user resource groups
+	BindUserResourceGroups(ctx context.Context, req *internalpb.CredentialInfo) (*commonpb.Status, error)
 	// UpdateCredential update password for a user
 	UpdateCredential(ctx context.Context, req *internalpb.CredentialInfo) (*commonpb.Status, error)
 	// DeleteCredential delete a user
 	DeleteCredential(ctx context.Context, req *milvuspb.DeleteCredentialRequest) (*commonpb.Status, error)
+	// DeleteUsersRG delete users rg
+	DeleteUsersRG(ctx context.Context, req *internalpb.DeleteUsersRGRequest) (*commonpb.Status, error)
 	// ListCredUsers list all usernames
 	ListCredUsers(ctx context.Context, req *milvuspb.ListCredUsersRequest) (*milvuspb.ListCredUsersResponse, error)
 	// GetCredential get credential by username
@@ -904,8 +909,9 @@ type Proxy interface {
 	//
 	// error is returned only when some communication issue occurs.
 	InvalidateCredentialCache(ctx context.Context, request *proxypb.InvalidateCredCacheRequest) (*commonpb.Status, error)
-
 	UpdateCredentialCache(ctx context.Context, request *proxypb.UpdateCredCacheRequest) (*commonpb.Status, error)
+	UpdateCredentialRGsCache(ctx context.Context, request *proxypb.UpdateCredCacheRGsRequest) (*commonpb.Status, error)
+	DeleteCredentialsRGCache(ctx context.Context, request *proxypb.DeleteCredentialsRGRequest) (*commonpb.Status, error)
 
 	// SetRates notifies Proxy to limit rates of requests.
 	SetRates(ctx context.Context, req *proxypb.SetRatesRequest) (*commonpb.Status, error)
@@ -1398,9 +1404,10 @@ type ProxyComponent interface {
 	ListImportTasks(ctx context.Context, req *milvuspb.ListImportTasksRequest) (*milvuspb.ListImportTasksResponse, error)
 
 	GetReplicas(ctx context.Context, req *milvuspb.GetReplicasRequest) (*milvuspb.GetReplicasResponse, error)
-
 	// CreateCredential create new user and password
 	CreateCredential(ctx context.Context, req *milvuspb.CreateCredentialRequest) (*commonpb.Status, error)
+	// BindUserResourceGroups proxy bind user resource groups
+	BindUserResourceGroups(ctx context.Context, req *milvuspb.BindUserRGsRequest) (*commonpb.Status, error)
 	// UpdateCredential update password for a user
 	UpdateCredential(ctx context.Context, req *milvuspb.UpdateCredentialRequest) (*commonpb.Status, error)
 	// DeleteCredential delete a user

@@ -77,8 +77,10 @@ type IMetaTable interface {
 
 	// TODO: better to accept ctx.
 	AddCredential(credInfo *internalpb.CredentialInfo) error
+	UpdateCredentialRGs(credInfo *internalpb.CredentialInfo) error
 	GetCredential(username string) (*internalpb.CredentialInfo, error)
 	DeleteCredential(username string) error
+	DeleteCredentialsRG(rg string) error
 	AlterCredential(credInfo *internalpb.CredentialInfo) error
 	ListCredentialUsernames() (*milvuspb.ListCredUsersResponse, error)
 
@@ -1145,8 +1147,29 @@ func (mt *MetaTable) AddCredential(credInfo *internalpb.CredentialInfo) error {
 	credential := &model.Credential{
 		Username:          credInfo.Username,
 		EncryptedPassword: credInfo.EncryptedPassword,
+		ResourceGroups:    credInfo.ResourceGroups,
 	}
 	return mt.catalog.CreateCredential(mt.ctx, credential)
+}
+
+func (mt *MetaTable) UpdateCredentialRGs(credInfo *internalpb.CredentialInfo) error {
+	if credInfo.Username == "" {
+		return fmt.Errorf("username is empty")
+	}
+	mt.permissionLock.Lock()
+	defer mt.permissionLock.Unlock()
+
+	// check credential exist
+	if origin, _ := mt.catalog.GetCredential(mt.ctx, credInfo.Username); origin == nil {
+		return fmt.Errorf("user not exist: %s", credInfo.Username)
+	}
+
+	credential := &model.Credential{
+		Username:       credInfo.Username,
+		ResourceGroups: credInfo.ResourceGroups,
+	}
+	return mt.catalog.UpdateCredentialRGs(mt.ctx, credential)
+
 }
 
 // AlterCredential update credential
@@ -1180,6 +1203,14 @@ func (mt *MetaTable) DeleteCredential(username string) error {
 	defer mt.permissionLock.Unlock()
 
 	return mt.catalog.DropCredential(mt.ctx, username)
+}
+
+// DeleteCredentialsRG cascade delete user-associated rg
+func (mt *MetaTable) DeleteCredentialsRG(rg string) error {
+	mt.permissionLock.Lock()
+	defer mt.permissionLock.Unlock()
+
+	return mt.catalog.DropCredentialsRG(mt.ctx, rg)
 }
 
 // ListCredentialUsernames list credential usernames

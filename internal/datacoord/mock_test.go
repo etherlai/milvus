@@ -797,11 +797,19 @@ func (m *mockRootCoordService) CreateCredential(ctx context.Context, req *intern
 	panic("implement me")
 }
 
+func (m *mockRootCoordService) BindUserResourceGroups(ctx context.Context, req *internalpb.CredentialInfo) (*commonpb.Status, error) {
+	panic("implement me")
+}
+
 func (m *mockRootCoordService) UpdateCredential(ctx context.Context, req *internalpb.CredentialInfo) (*commonpb.Status, error) {
 	panic("implement me")
 }
 
 func (m *mockRootCoordService) DeleteCredential(ctx context.Context, req *milvuspb.DeleteCredentialRequest) (*commonpb.Status, error) {
+	panic("implement me")
+}
+
+func (m *mockRootCoordService) DeleteUsersRG(ctx context.Context, req *internalpb.DeleteUsersRGRequest) (*commonpb.Status, error) {
 	panic("implement me")
 }
 

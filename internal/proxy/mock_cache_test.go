@@ -18,6 +18,21 @@ type MockCache struct {
 	mock.Mock
 }
 
+func (_m *MockCache) GetCredentialRGsInfo(ctx context.Context, username string) (*internalpb.CredentialInfo, error) {
+	//TODO(wys) implement me
+	panic("implement me")
+}
+
+func (_m *MockCache) UpdateCredentialRGs(credInfo *internalpb.CredentialInfo) {
+	//TODO(wys) implement me
+	panic("implement me")
+}
+
+func (_m *MockCache) DeleteCredentialsRG(resourceGroup string) {
+	//TODO(wys) implement me
+	panic("implement me")
+}
+
 type MockCache_Expecter struct {
 	mock *mock.Mock
 }

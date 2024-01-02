@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/milvus-io/milvus/internal/proto/internalpb"
 	"math"
 
 	"github.com/golang/protobuf/proto"
@@ -2085,6 +2086,7 @@ type DropResourceGroupTask struct {
 	*milvuspb.DropResourceGroupRequest
 	ctx        context.Context
 	queryCoord types.QueryCoord
+	rootCoord  types.RootCoord
 	result     *commonpb.Status
 }
 
@@ -2134,12 +2136,19 @@ func (t *DropResourceGroupTask) PreExecute(ctx context.Context) error {
 
 func (t *DropResourceGroupTask) Execute(ctx context.Context) error {
 	var err error
+	log.Info("DropResourceGroupTask Execute request queryCoord DropResourceGroup", zap.String("role", typeutil.ProxyRole))
 	t.result, err = t.queryCoord.DropResourceGroup(ctx, t.DropResourceGroupRequest)
 	return err
 }
 
 func (t *DropResourceGroupTask) PostExecute(ctx context.Context) error {
-	return nil
+	var err error
+	// cascade delete user-associated rg
+	if t.result.ErrorCode == commonpb.ErrorCode_Success {
+		log.Info("DropResourceGroupTask Execute request rootCoord DeleteUsersRG", zap.String("role", typeutil.ProxyRole))
+		t.result, err = t.rootCoord.DeleteUsersRG(ctx, &internalpb.DeleteUsersRGRequest{ResourceGroup: t.DropResourceGroupRequest.ResourceGroup})
+	}
+	return err
 }
 
 type DescribeResourceGroupTask struct {
@@ -2228,6 +2237,7 @@ func (t *DescribeResourceGroupTask) Execute(ctx context.Context) error {
 				NumLoadedReplica: loadReplicas,
 				NumOutgoingNode:  outgoingNodes,
 				NumIncomingNode:  incomingNodes,
+				Nodes:            rgInfo.GetNodes(),
 			},
 		}
 	} else {

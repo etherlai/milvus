@@ -872,6 +872,11 @@ func passwordVerify(ctx context.Context, username, rawPwd string, globalMetaCach
 
 	// hit cache
 	sha256Pwd := crypto.SHA256(rawPwd, credInfo.Username)
+	//TODO(wys) This log needs to be deleted
+	log.Info("passwordVerify", zap.String("username", username), zap.String("credInfo username", credInfo.Username),
+		zap.String("rawPwd sha256", sha256Pwd),
+		zap.String("cachePwd sha256", credInfo.Sha256Password),
+		zap.String("EncryptedPassword", credInfo.EncryptedPassword))
 	if credInfo.Sha256Password != "" {
 		return sha256Pwd == credInfo.Sha256Password
 	}

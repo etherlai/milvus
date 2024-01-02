@@ -1004,8 +1004,20 @@ func (s *Server) UpdateCredentialCache(ctx context.Context, request *proxypb.Upd
 	return s.proxy.UpdateCredentialCache(ctx, request)
 }
 
+func (s *Server) UpdateCredentialRGsCache(ctx context.Context, request *proxypb.UpdateCredCacheRGsRequest) (*commonpb.Status, error) {
+	return s.proxy.UpdateCredentialRGsCache(ctx, request)
+}
+
+func (s *Server) DeleteCredentialsRGCache(ctx context.Context, request *proxypb.DeleteCredentialsRGRequest) (*commonpb.Status, error) {
+	return s.proxy.DeleteCredentialsRGCache(ctx, request)
+}
+
 func (s *Server) CreateCredential(ctx context.Context, req *milvuspb.CreateCredentialRequest) (*commonpb.Status, error) {
 	return s.proxy.CreateCredential(ctx, req)
+}
+
+func (s *Server) BindUserResourceGroups(ctx context.Context, req *milvuspb.BindUserRGsRequest) (*commonpb.Status, error) {
+	return s.proxy.BindUserResourceGroups(ctx, req)
 }
 
 func (s *Server) UpdateCredential(ctx context.Context, req *milvuspb.UpdateCredentialRequest) (*commonpb.Status, error) {

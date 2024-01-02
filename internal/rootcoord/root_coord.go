@@ -542,7 +542,7 @@ func (c *Core) initCredentials() error {
 	if credInfo == nil {
 		log.Info("RootCoord init user root")
 		encryptedRootPassword, _ := crypto.PasswordEncrypt(util.DefaultRootPassword)
-		err := c.meta.AddCredential(&internalpb.CredentialInfo{Username: util.UserRoot, EncryptedPassword: encryptedRootPassword})
+		err := c.meta.AddCredential(&internalpb.CredentialInfo{Username: util.UserRoot, EncryptedPassword: encryptedRootPassword, ResourceGroups: make(map[string]string)})
 		return err
 	}
 	return nil
@@ -2075,6 +2075,33 @@ func (c *Core) UpdateCredCache(ctx context.Context, credInfo *internalpb.Credent
 	return c.proxyClientManager.UpdateCredentialCache(ctx, &req)
 }
 
+// UpdateCredRGsCache will call update credential resource groups cache
+func (c *Core) UpdateCredRGsCache(ctx context.Context, credInfo *internalpb.CredentialInfo) error {
+	req := proxypb.UpdateCredCacheRGsRequest{
+		Base: commonpbutil.NewMsgBase(
+			commonpbutil.WithMsgType(0), //TODO, msg type
+			commonpbutil.WithMsgID(0),   //TODO, msg id
+			commonpbutil.WithSourceID(c.session.ServerID),
+		),
+		Username:       credInfo.Username,
+		ResourceGroups: credInfo.ResourceGroups,
+	}
+	return c.proxyClientManager.UpdateCredentialRGsCache(ctx, &req)
+}
+
+// DeleteCredsRGCache will call delete credentials resource group cache
+func (c *Core) DeleteCredsRGCache(ctx context.Context, resourceGroup string) error {
+	req := proxypb.DeleteCredentialsRGRequest{
+		Base: commonpbutil.NewMsgBase(
+			commonpbutil.WithMsgType(0), //TODO, msg type
+			commonpbutil.WithMsgID(0),   //TODO, msg id
+			commonpbutil.WithSourceID(c.session.ServerID),
+		),
+		ResourceGroup: resourceGroup,
+	}
+	return c.proxyClientManager.DeleteCredentialsRGCache(ctx, &req)
+}
+
 // CreateCredential create new user and password
 //  1. decode ciphertext password to raw password
 //  2. encrypt raw password
@@ -2116,6 +2143,43 @@ func (c *Core) CreateCredential(ctx context.Context, credInfo *internalpb.Creden
 	return succStatus(), nil
 }
 
+func (c *Core) BindUserResourceGroups(ctx context.Context, credInfo *internalpb.CredentialInfo) (*commonpb.Status, error) {
+	method := "BindUserResourceGroups"
+	metrics.RootCoordDDLReqCounter.WithLabelValues(method, metrics.TotalLabel).Inc()
+	tr := timerecord.NewTimeRecorder(method)
+	log.Info("BindUserResourceGroups", zap.String("role", typeutil.RootCoordRole),
+		zap.String("username", credInfo.Username))
+
+	if code, ok := c.checkHealthy(); !ok {
+		ret := &commonpb.Status{}
+		setNotServingStatus(ret, code)
+		return ret, nil
+	}
+
+	// update db
+	err := c.meta.UpdateCredentialRGs(credInfo)
+	if err != nil {
+		log.Error("UpdateCredentialRGs save credential rgs failed", zap.String("role", typeutil.RootCoordRole),
+			zap.String("username", credInfo.Username), zap.Error(err))
+		metrics.RootCoordDDLReqCounter.WithLabelValues(method, metrics.FailLabel).Inc()
+		return failStatus(commonpb.ErrorCode_CreateCredentialFailure, "UpdateCredentialRGs failed: "+err.Error()), nil
+	}
+	// update proxy's local user rgs cache
+	err = c.UpdateCredRGsCache(ctx, credInfo)
+	if err != nil {
+		log.Warn("UpdateCredentialRGs add cache failed", zap.String("role", typeutil.RootCoordRole),
+			zap.String("username", credInfo.Username), zap.Error(err))
+		metrics.RootCoordDDLReqCounter.WithLabelValues(method, metrics.FailLabel).Inc()
+	}
+	log.Info("UpdateCredentialRGs success", zap.String("role", typeutil.RootCoordRole),
+		zap.String("username", credInfo.Username))
+
+	metrics.RootCoordDDLReqCounter.WithLabelValues(method, metrics.SuccessLabel).Inc()
+	metrics.RootCoordDDLReqLatency.WithLabelValues(method).Observe(float64(tr.ElapseSpan().Milliseconds()))
+	metrics.RootCoordNumOfCredentials.Inc()
+	return succStatus(), nil
+}
+
 // GetCredential get credential by username
 func (c *Core) GetCredential(ctx context.Context, in *rootcoordpb.GetCredentialRequest) (*rootcoordpb.GetCredentialResponse, error) {
 	method := "GetCredential"
@@ -2144,10 +2208,12 @@ func (c *Core) GetCredential(ctx context.Context, in *rootcoordpb.GetCredentialR
 
 	metrics.RootCoordDDLReqCounter.WithLabelValues(method, metrics.SuccessLabel).Inc()
 	metrics.RootCoordDDLReqLatency.WithLabelValues(method).Observe(float64(tr.ElapseSpan().Milliseconds()))
+
 	return &rootcoordpb.GetCredentialResponse{
-		Status:   succStatus(),
-		Username: credInfo.Username,
-		Password: credInfo.EncryptedPassword,
+		Status:         succStatus(),
+		Username:       credInfo.Username,
+		Password:       credInfo.EncryptedPassword,
+		ResourceGroups: credInfo.ResourceGroups,
 	}, nil
 }
 
@@ -2173,6 +2239,9 @@ func (c *Core) UpdateCredential(ctx context.Context, credInfo *internalpb.Creden
 		metrics.RootCoordDDLReqCounter.WithLabelValues(method, metrics.FailLabel).Inc()
 		return failStatus(commonpb.ErrorCode_UpdateCredentialFailure, "UpdateCredential failed: "+err.Error()), nil
 	}
+	log.Info("UpdateCredential success", zap.String("role", typeutil.RootCoordRole),
+		zap.String("username", credInfo.Username))
+
 	// update proxy's local cache
 	err = c.UpdateCredCache(ctx, credInfo)
 	if err != nil {
@@ -2181,7 +2250,7 @@ func (c *Core) UpdateCredential(ctx context.Context, credInfo *internalpb.Creden
 		metrics.RootCoordDDLReqCounter.WithLabelValues(method, metrics.FailLabel).Inc()
 		return failStatus(commonpb.ErrorCode_UpdateCredentialFailure, "UpdateCredential failed: "+err.Error()), nil
 	}
-	log.Info("UpdateCredential success", zap.String("role", typeutil.RootCoordRole),
+	log.Info("UpdateCredCache success", zap.String("role", typeutil.RootCoordRole),
 		zap.String("username", credInfo.Username))
 
 	metrics.RootCoordDDLReqCounter.WithLabelValues(method, metrics.SuccessLabel).Inc()
@@ -2250,6 +2319,48 @@ func (c *Core) DeleteCredential(ctx context.Context, in *milvuspb.DeleteCredenti
 	metrics.RootCoordNumOfCredentials.Dec()
 	status = succStatus()
 	return status, nil
+}
+
+func (c *Core) DeleteUsersRG(ctx context.Context, req *internalpb.DeleteUsersRGRequest) (*commonpb.Status, error) {
+	method := "DeleteUsersRG"
+	metrics.RootCoordDDLReqCounter.WithLabelValues(method, metrics.TotalLabel).Inc()
+	tr := timerecord.NewTimeRecorder(method)
+	log.Info("DeleteUsersRG", zap.String("role", typeutil.RootCoordRole),
+		zap.String("resource group", req.ResourceGroup))
+
+	if code, ok := c.checkHealthy(); !ok {
+		ret := &commonpb.Status{}
+		setNotServingStatus(ret, code)
+		return ret, nil
+	}
+
+	// cascade delete user-associated rg
+	rg := req.ResourceGroup
+	err := c.meta.DeleteCredentialsRG(rg)
+	if err != nil {
+		log.Error("DeleteCredentialsRG drop users rg failed", zap.String("role", typeutil.RootCoordRole),
+			zap.String("resource group", req.ResourceGroup), zap.Error(err))
+		metrics.RootCoordDDLReqCounter.WithLabelValues(method, metrics.FailLabel).Inc()
+		return failStatus(commonpb.ErrorCode_UpdateCredentialFailure, "DeleteCredentialsRG failed: "+err.Error()), nil
+	}
+	log.Info("DeleteCredentialsRG success", zap.String("role", typeutil.RootCoordRole),
+		zap.String("resource group", req.ResourceGroup))
+
+	// delete proxy's local user rgs cache
+	err = c.DeleteCredsRGCache(ctx, rg)
+	if err != nil {
+		log.Warn("DeleteCredsRGCache drop users rg cache failed", zap.String("role", typeutil.RootCoordRole),
+			zap.String("resource group", req.ResourceGroup), zap.Error(err))
+		metrics.RootCoordDDLReqCounter.WithLabelValues(method, metrics.FailLabel).Inc()
+		return failStatus(commonpb.ErrorCode_UpdateCredentialFailure, "DeleteCredsRGCache failed: "+err.Error()), nil
+	}
+	log.Info("DeleteCredsRGCache success", zap.String("role", typeutil.RootCoordRole),
+		zap.String("resource group", req.ResourceGroup))
+
+	metrics.RootCoordDDLReqCounter.WithLabelValues(method, metrics.SuccessLabel).Inc()
+	metrics.RootCoordDDLReqLatency.WithLabelValues(method).Observe(float64(tr.ElapseSpan().Milliseconds()))
+	metrics.RootCoordNumOfCredentials.Inc()
+	return succStatus(), nil
 }
 
 // ListCredUsers list all usernames
