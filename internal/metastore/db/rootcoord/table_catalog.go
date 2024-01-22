@@ -644,6 +644,16 @@ func (tc *Catalog) DropCredential(ctx context.Context, username string) error {
 	return nil
 }
 
+func (tc *Catalog) UpdateCredentialRGs(ctx context.Context, credential *model.Credential) error {
+	//TODO(wys) implement
+	panic("implement me")
+}
+
+func (tc *Catalog) DropCredentialsRG(ctx context.Context, rg string) error {
+	// TODO(wys) implement
+	panic("implement me")
+}
+
 func (tc *Catalog) ListCredentials(ctx context.Context) ([]string, error) {
 	tenantID := contextutil.TenantID(ctx)
 

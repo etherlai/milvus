@@ -274,6 +274,10 @@ func (m *mockProxyComponent) CreateCredential(ctx context.Context, request *milv
 	return testStatus, nil
 }
 
+func (m *mockProxyComponent) BindUserResourceGroups(ctx context.Context, req *milvuspb.BindUserRGsRequest) (*commonpb.Status, error) {
+	return testStatus, nil
+}
+
 func (m *mockProxyComponent) UpdateCredential(ctx context.Context, request *milvuspb.UpdateCredentialRequest) (*commonpb.Status, error) {
 	return testStatus, nil
 }

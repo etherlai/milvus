@@ -181,6 +181,42 @@ func (c *Client) UpdateCredentialCache(ctx context.Context, req *proxypb.UpdateC
 	return ret.(*commonpb.Status), err
 }
 
+func (c *Client) UpdateCredentialRGsCache(ctx context.Context, req *proxypb.UpdateCredCacheRGsRequest) (*commonpb.Status, error) {
+	req = typeutil.Clone(req)
+	commonpbutil.UpdateMsgBase(
+		req.GetBase(),
+		commonpbutil.FillMsgBaseFromClient(Params.ProxyCfg.GetNodeID(), commonpbutil.WithTargetID(c.grpcClient.GetNodeID())),
+	)
+	ret, err := c.grpcClient.ReCall(ctx, func(client proxypb.ProxyClient) (any, error) {
+		if !funcutil.CheckCtxValid(ctx) {
+			return nil, ctx.Err()
+		}
+		return client.UpdateCredentialRGsCache(ctx, req)
+	})
+	if err != nil || ret == nil {
+		return nil, err
+	}
+	return ret.(*commonpb.Status), err
+}
+
+func (c *Client) DeleteCredentialsRGCache(ctx context.Context, req *proxypb.DeleteCredentialsRGRequest) (*commonpb.Status, error) {
+	req = typeutil.Clone(req)
+	commonpbutil.UpdateMsgBase(
+		req.GetBase(),
+		commonpbutil.FillMsgBaseFromClient(Params.ProxyCfg.GetNodeID(), commonpbutil.WithTargetID(c.grpcClient.GetNodeID())),
+	)
+	ret, err := c.grpcClient.ReCall(ctx, func(client proxypb.ProxyClient) (any, error) {
+		if !funcutil.CheckCtxValid(ctx) {
+			return nil, ctx.Err()
+		}
+		return client.DeleteCredentialsRGCache(ctx, req)
+	})
+	if err != nil || ret == nil {
+		return nil, err
+	}
+	return ret.(*commonpb.Status), err
+}
+
 func (c *Client) RefreshPolicyInfoCache(ctx context.Context, req *proxypb.RefreshPolicyInfoCacheRequest) (*commonpb.Status, error) {
 	req = typeutil.Clone(req)
 	commonpbutil.UpdateMsgBase(

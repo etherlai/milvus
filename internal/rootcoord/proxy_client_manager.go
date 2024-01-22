@@ -211,6 +211,60 @@ func (p *proxyClientManager) UpdateCredentialCache(ctx context.Context, request 
 	return group.Wait()
 }
 
+// DeleteCredentialsRGCache TODO: too many codes similar to InvalidateCollectionMetaCache.
+func (p *proxyClientManager) DeleteCredentialsRGCache(ctx context.Context, request *proxypb.DeleteCredentialsRGRequest) error {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
+	if len(p.proxyClient) == 0 {
+		log.Warn("proxy client is empty, DeleteCredentialsRGCache will not send to any client")
+		return nil
+	}
+
+	group := &errgroup.Group{}
+	for k, v := range p.proxyClient {
+		k, v := k, v
+		group.Go(func() error {
+			sta, err := v.DeleteCredentialsRGCache(ctx, request)
+			if err != nil {
+				return fmt.Errorf("DeleteCredentialsRGCache failed, proxyID = %d, err = %s", k, err)
+			}
+			if sta.ErrorCode != commonpb.ErrorCode_Success {
+				return fmt.Errorf("DeleteCredentialsRGCache failed, proxyID = %d, err = %s", k, sta.Reason)
+			}
+			return nil
+		})
+	}
+	return group.Wait()
+}
+
+// UpdateCredentialRGsCache TODO: too many codes similar to InvalidateCollectionMetaCache.
+func (p *proxyClientManager) UpdateCredentialRGsCache(ctx context.Context, request *proxypb.UpdateCredCacheRGsRequest) error {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
+	if len(p.proxyClient) == 0 {
+		log.Warn("proxy client is empty, UpdateCredentialRGsCache will not send to any client")
+		return nil
+	}
+
+	group := &errgroup.Group{}
+	for k, v := range p.proxyClient {
+		k, v := k, v
+		group.Go(func() error {
+			sta, err := v.UpdateCredentialRGsCache(ctx, request)
+			if err != nil {
+				return fmt.Errorf("UpdateCredentialRGsCache failed, proxyID = %d, err = %s", k, err)
+			}
+			if sta.ErrorCode != commonpb.ErrorCode_Success {
+				return fmt.Errorf("UpdateCredentialRGsCache failed, proxyID = %d, err = %s", k, sta.Reason)
+			}
+			return nil
+		})
+	}
+	return group.Wait()
+}
+
 // RefreshPolicyInfoCache TODO: too many codes similar to InvalidateCollectionMetaCache.
 func (p *proxyClientManager) RefreshPolicyInfoCache(ctx context.Context, req *proxypb.RefreshPolicyInfoCacheRequest) error {
 	p.lock.Lock()

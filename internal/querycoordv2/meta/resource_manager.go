@@ -19,6 +19,7 @@ package meta
 import (
 	"errors"
 	"github.com/milvus-io/milvus/internal/querycoordv2/k8s"
+	"sort"
 	"sync"
 
 	"github.com/milvus-io/milvus/internal/log"
@@ -105,6 +106,15 @@ func (rg *ResourceGroup) containsNode(id int64) bool {
 
 func (rg *ResourceGroup) GetNodes() []int64 {
 	return rg.nodes.Collect()
+}
+
+func (rg *ResourceGroup) GetSortNodes() []int64 {
+	var nodes []int64
+	nodes = rg.nodes.Collect()
+	sort.Slice(nodes, func(i, j int) bool {
+		return nodes[i] > nodes[j]
+	})
+	return nodes
 }
 
 func (rg *ResourceGroup) GetCapacity() int {
@@ -565,7 +575,7 @@ func (rm *ResourceManager) TransferNode(from string, to string, numNode int) ([]
 					}
 				}
 				if match {
-					log.Info("select nodeK8sInfo", zap.String("PodName", nodeK8sInfo.PodName))
+					log.Info("select nodeK8sInfo", zap.String("PodName", nodeK8sInfo.PodName), zap.Int64("nodeID", node))
 					availableNodes = append(availableNodes, node)
 				}
 			}
@@ -672,11 +682,41 @@ func (rm *ResourceManager) AutoRecoverResourceGroup(rgName string) ([]int64, err
 
 	rm.checkRGNodeStatus(DefaultResourceGroupName)
 	rm.checkRGNodeStatus(rgName)
+	toNodeSelector := rm.groups[rgName].GetNodeSelector()
+	nodesK8sInfo, err := rm.k8sInfoeMgr.GetAllQueryNodes()
+	if err != nil {
+		return nil, err
+	}
+	nodeK8sInfoMap := make(map[string]*k8s.QueryNodeK8sInfo)
+	for _, n := range nodesK8sInfo {
+		nodeK8sInfoMap[n.Addr] = n
+	}
 	lackNodesNum := rm.groups[rgName].LackOfNodes()
-	nodesInDefault := rm.groups[DefaultResourceGroupName].GetNodes()
+	nodesInDefault := rm.groups[DefaultResourceGroupName].GetSortNodes()
+	log.Info("default resource group", zap.Int64s("nodes list", nodesInDefault))
 	for i := 0; i < len(nodesInDefault) && i < lackNodesNum; i++ {
 		//todo: a better way to choose a node with least balance cost
 		node := nodesInDefault[i]
+		nodeInfo := rm.nodeMgr.Get(node)
+		if nodeK8sInfo, ok := nodeK8sInfoMap[nodeInfo.Addr()]; ok {
+			nodeSelector := nodeK8sInfo.Selectors
+			match := true
+			for k, v := range toNodeSelector {
+				if _, ok2 := nodeSelector[k]; !ok2 || v != nodeSelector[k] {
+					match = false
+					break
+				}
+			}
+			if match {
+				log.Info("recover resource group, node match select nodeK8sInfo", zap.String("PodName", nodeK8sInfo.PodName), zap.Int64("nodeID", node))
+			} else {
+				log.Info("recover resource group, node not match", zap.String("PodName", nodeK8sInfo.PodName), zap.Int64("nodeID", node))
+				continue
+			}
+		} else {
+			log.Warn("node not exist in milvus cluster", zap.Int64("nodeID", node), zap.String("addr", nodeInfo.Addr()))
+			continue
+		}
 		err := rm.unassignNode(DefaultResourceGroupName, node)
 		if err != nil {
 			// interrupt transfer, unreachable logic path

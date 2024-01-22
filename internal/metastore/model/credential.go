@@ -8,6 +8,7 @@ type Credential struct {
 	Tenant            string
 	IsSuper           bool
 	Sha256Password    string
+	ResourceGroups    map[string]string
 }
 
 func MarshalCredentialModel(cred *Credential) *internalpb.CredentialInfo {
@@ -20,5 +21,6 @@ func MarshalCredentialModel(cred *Credential) *internalpb.CredentialInfo {
 		EncryptedPassword: cred.EncryptedPassword,
 		IsSuper:           cred.IsSuper,
 		Sha256Password:    cred.Sha256Password,
+		ResourceGroups:    cred.ResourceGroups,
 	}
 }

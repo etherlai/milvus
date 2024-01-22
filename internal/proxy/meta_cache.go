@@ -48,6 +48,7 @@ import (
 )
 
 // Cache is the interface for system meta data cache
+//
 //go:generate mockery --name=Cache --filename=mock_cache_test.go --outpkg=proxy --output=. --inpackage --structname=MockCache --with-expecter
 type Cache interface {
 	// GetCollectionID get collection's id by name.
@@ -73,8 +74,11 @@ type Cache interface {
 
 	// GetCredentialInfo operate credential cache
 	GetCredentialInfo(ctx context.Context, username string) (*internalpb.CredentialInfo, error)
+	GetCredentialRGsInfo(ctx context.Context, username string) (*internalpb.CredentialInfo, error)
 	RemoveCredential(username string)
 	UpdateCredential(credInfo *internalpb.CredentialInfo)
+	UpdateCredentialRGs(credInfo *internalpb.CredentialInfo)
+	DeleteCredentialsRG(resourceGroup string)
 
 	GetPrivilegeInfo(ctx context.Context) []string
 	GetUserRole(username string) []string
@@ -701,6 +705,43 @@ func (m *MetaCache) GetCredentialInfo(ctx context.Context, username string) (*in
 			Username:          resp.Username,
 			EncryptedPassword: resp.Password,
 		}
+		//TODO(wys) This log needs to be deleted
+		log.Info("GetCredentialInfo from rootCoord", zap.String("username", username),
+			zap.String("credInfo username", credInfo.Username),
+			zap.String("EncryptedPassword", credInfo.EncryptedPassword))
+	} else {
+		//TODO(wys) This log needs to be deleted
+		log.Info("GetCredentialInfo from credMap", zap.String("username", username),
+			zap.String("credInfo username", credInfo.Username),
+			zap.String("EncryptedPassword", credInfo.EncryptedPassword))
+	}
+
+	return credInfo, nil
+}
+
+func (m *MetaCache) GetCredentialRGsInfo(ctx context.Context, username string) (*internalpb.CredentialInfo, error) {
+	m.credMut.RLock()
+	var credInfo *internalpb.CredentialInfo
+	credInfo, ok := m.credMap[username]
+	m.credMut.RUnlock()
+
+	if !ok || credInfo.ResourceGroups == nil || len(credInfo.ResourceGroups) == 0 {
+		req := &rootcoordpb.GetCredentialRequest{
+			Base: commonpbutil.NewMsgBase(
+				commonpbutil.WithMsgType(commonpb.MsgType_GetCredential),
+			),
+			Username: username,
+		}
+		resp, err := m.rootCoord.GetCredential(ctx, req)
+		if err != nil {
+			return &internalpb.CredentialInfo{}, err
+		}
+		credInfo = &internalpb.CredentialInfo{
+			Username:       resp.Username,
+			ResourceGroups: resp.ResourceGroups,
+		}
+		// update if credMap rgs does not exist
+		m.UpdateCredentialRGs(credInfo)
 	}
 
 	return credInfo, nil
@@ -725,6 +766,36 @@ func (m *MetaCache) UpdateCredential(credInfo *internalpb.CredentialInfo) {
 	// Do not cache encrypted password content
 	m.credMap[username].Username = username
 	m.credMap[username].Sha256Password = credInfo.Sha256Password
+}
+
+func (m *MetaCache) UpdateCredentialRGs(credInfo *internalpb.CredentialInfo) {
+	m.credMut.Lock()
+	defer m.credMut.Unlock()
+	username := credInfo.Username
+	_, ok := m.credMap[username]
+	if !ok {
+		// TODO(wys) Credential should exist, if not exist, there's a problem here.
+		log.Warn("UpdateCredentialRGs, note that credential should exist", zap.String("username", username))
+		m.credMap[username] = &internalpb.CredentialInfo{}
+	}
+
+	m.credMap[username].Username = username
+	m.credMap[username].ResourceGroups = credInfo.ResourceGroups
+}
+
+func (m *MetaCache) DeleteCredentialsRG(resourceGroup string) {
+	m.credMut.Lock()
+	defer m.credMut.Unlock()
+
+	for username, credInfo := range m.credMap {
+		if _, ok := credInfo.ResourceGroups[resourceGroup]; ok {
+			delete(credInfo.ResourceGroups, resourceGroup)
+			m.credMap[username] = credInfo
+			//TODO(wys) This log needs to be deleted
+			log.Info("DeleteCredentialsRG in cache", zap.String("username", username), zap.String("delete resource group", resourceGroup),
+				zap.String("EncryptedPassword", credInfo.EncryptedPassword))
+		}
+	}
 }
 
 // GetShards update cache if withCache == false

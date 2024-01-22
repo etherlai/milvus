@@ -39,10 +39,14 @@ type RootCoordCatalog interface {
 	GetCredential(ctx context.Context, username string) (*model.Credential, error)
 	// CreateCredential creates credential by Username and EncryptedPassword in crediential. Please make sure credential.Username isn't empty before calling this API. Credentials already exists will be altered.
 	CreateCredential(ctx context.Context, credential *model.Credential) error
+	// UpdateCredentialRGs update user resource groups info
+	UpdateCredentialRGs(ctx context.Context, credential *model.Credential) error
 	// AlterCredential does exactly the same as CreateCredential
 	AlterCredential(ctx context.Context, credential *model.Credential) error
 	// DropCredential removes the credential of this username
 	DropCredential(ctx context.Context, username string) error
+	// DropCredentialsRG cascade delete user-associated rg
+	DropCredentialsRG(ctx context.Context, rg string) error
 	// ListCredentials gets all usernames.
 	ListCredentials(ctx context.Context) ([]string, error)
 

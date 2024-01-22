@@ -1268,6 +1268,7 @@ func (s *Server) DescribeResourceGroup(ctx context.Context, req *querypb.Describ
 		NumOutgoingNode:  outgoingNodes,
 		NumIncomingNode:  incomingNodes,
 		NodeSelector:     rg.GetNodeSelector(),
+		Nodes:            rg.GetNodes(),
 	}
 	return resp, nil
 }

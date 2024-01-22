@@ -249,11 +249,19 @@ func (m *MockRootCoord) DeleteCredential(ctx context.Context, req *milvuspb.Dele
 	return nil, nil
 }
 
+func (m *MockRootCoord) DeleteUsersRG(ctx context.Context, req *internalpb.DeleteUsersRGRequest) (*commonpb.Status, error) {
+	return nil, nil
+}
+
 func (m *MockRootCoord) ListCredUsers(ctx context.Context, req *milvuspb.ListCredUsersRequest) (*milvuspb.ListCredUsersResponse, error) {
 	return nil, nil
 }
 
 func (m *MockRootCoord) GetCredential(ctx context.Context, req *rootcoordpb.GetCredentialRequest) (*rootcoordpb.GetCredentialResponse, error) {
+	return nil, nil
+}
+
+func (m *MockRootCoord) BindUserResourceGroups(ctx context.Context, req *internalpb.CredentialInfo) (*commonpb.Status, error) {
 	return nil, nil
 }
 
@@ -972,6 +980,18 @@ func (m *MockProxy) InvalidateCredentialCache(ctx context.Context, request *prox
 }
 
 func (m *MockProxy) UpdateCredentialCache(ctx context.Context, request *proxypb.UpdateCredCacheRequest) (*commonpb.Status, error) {
+	return nil, nil
+}
+
+func (m *MockProxy) UpdateCredentialRGsCache(ctx context.Context, request *proxypb.UpdateCredCacheRGsRequest) (*commonpb.Status, error) {
+	return nil, nil
+}
+
+func (m *MockProxy) DeleteCredentialsRGCache(ctx context.Context, request *proxypb.DeleteCredentialsRGRequest) (*commonpb.Status, error) {
+	return nil, nil
+}
+
+func (m *MockProxy) BindUserResourceGroups(ctx context.Context, req *milvuspb.BindUserRGsRequest) (*commonpb.Status, error) {
 	return nil, nil
 }
 

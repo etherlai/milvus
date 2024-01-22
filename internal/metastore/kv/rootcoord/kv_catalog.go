@@ -281,7 +281,7 @@ func (kc *Catalog) CreateAlias(ctx context.Context, alias *model.Alias, ts typeu
 
 func (kc *Catalog) CreateCredential(ctx context.Context, credential *model.Credential) error {
 	k := fmt.Sprintf("%s/%s", CredentialPrefix, credential.Username)
-	v, err := json.Marshal(&internalpb.CredentialInfo{EncryptedPassword: credential.EncryptedPassword})
+	v, err := json.Marshal(&internalpb.CredentialInfo{EncryptedPassword: credential.EncryptedPassword, ResourceGroups: credential.ResourceGroups})
 	if err != nil {
 		log.Error("create credential marshal fail", zap.String("key", k), zap.Error(err))
 		return err
@@ -296,7 +296,55 @@ func (kc *Catalog) CreateCredential(ctx context.Context, credential *model.Crede
 	return nil
 }
 
+func (kc *Catalog) UpdateCredentialRGs(ctx context.Context, credential *model.Credential) error {
+	k := fmt.Sprintf("%s/%s", CredentialPrefix, credential.Username)
+	v, err := kc.Txn.Load(k)
+	if err != nil {
+		if common.IsKeyNotExistError(err) {
+			log.Debug("not found the user", zap.String("key", k))
+		} else {
+			log.Warn("get credential meta fail", zap.String("key", k), zap.Error(err))
+		}
+		return err
+	}
+
+	credentialInfo := internalpb.CredentialInfo{}
+	err = json.Unmarshal([]byte(v), &credentialInfo)
+	if err != nil {
+		return fmt.Errorf("unmarshal credential info err:%w", err)
+	}
+	// accumulate rgs
+	//if credentialInfo.ResourceGroups != nil {
+	//	for k, _ := range credential.ResourceGroups {
+	//		credentialInfo.ResourceGroups[k] = k
+	//	}
+	//}
+	// the strategy of binding rgs is to overwrite the original rgs
+	credentialInfo.ResourceGroups = credential.ResourceGroups
+
+	credentialValue, err := json.Marshal(&internalpb.CredentialInfo{EncryptedPassword: credentialInfo.EncryptedPassword, ResourceGroups: credentialInfo.ResourceGroups})
+	if err != nil {
+		log.Error("update credential rgs marshal fail", zap.String("key", k), zap.Error(err))
+		return err
+	}
+
+	err = kc.Txn.Save(k, string(credentialValue))
+	if err != nil {
+		log.Error("update credential rgs persist meta fail", zap.String("key", k), zap.Error(err))
+		return err
+	}
+
+	return nil
+}
+
 func (kc *Catalog) AlterCredential(ctx context.Context, credential *model.Credential) error {
+	// avoid rgs reset
+	credentialInfo, err := kc.GetCredential(ctx, credential.Username)
+	if err != nil {
+		return err
+	}
+	credential.ResourceGroups = credentialInfo.ResourceGroups
+
 	return kc.CreateCredential(ctx, credential)
 }
 
@@ -396,7 +444,7 @@ func (kc *Catalog) GetCredential(ctx context.Context, username string) (*model.C
 		return nil, fmt.Errorf("unmarshal credential info err:%w", err)
 	}
 
-	return &model.Credential{Username: username, EncryptedPassword: credentialInfo.EncryptedPassword}, nil
+	return &model.Credential{Username: username, EncryptedPassword: credentialInfo.EncryptedPassword, ResourceGroups: credentialInfo.ResourceGroups}, nil
 }
 
 func (kc *Catalog) AlterAlias(ctx context.Context, alias *model.Alias, ts typeutil.Timestamp) error {
@@ -562,6 +610,62 @@ func (kc *Catalog) DropCredential(ctx context.Context, username string) error {
 		return err
 	}
 
+	return nil
+}
+
+func (kc *Catalog) DropCredentialsRG(ctx context.Context, rg string) error {
+
+	usernames, err := kc.ListCredentials(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, user := range usernames {
+		k := fmt.Sprintf("%s/%s", CredentialPrefix, user)
+		v, err := kc.Txn.Load(k)
+		if err != nil {
+			if common.IsKeyNotExistError(err) {
+				log.Debug("not found the user", zap.String("key", k))
+			} else {
+				log.Warn("get credential meta fail", zap.String("key", k), zap.Error(err))
+			}
+			return err
+		}
+
+		credentialInfo := internalpb.CredentialInfo{}
+		err = json.Unmarshal([]byte(v), &credentialInfo)
+		if err != nil {
+			return fmt.Errorf("unmarshal credential info err:%w", err)
+		}
+		if _, ok := credentialInfo.ResourceGroups[rg]; !ok {
+			// rg does not exist, no need to update credential
+			continue
+		}
+		delete(credentialInfo.ResourceGroups, rg)
+
+		credentialValue, err := json.Marshal(&internalpb.CredentialInfo{EncryptedPassword: credentialInfo.EncryptedPassword,
+			ResourceGroups: credentialInfo.ResourceGroups})
+		if err != nil {
+			log.Error("update credential rgs marshal fail", zap.String("key", k), zap.Error(err))
+			return err
+		} else {
+			//TODO(wys) This log needs to be deleted
+			var rgs []string
+			for k := range credentialInfo.ResourceGroups {
+				rgs = append(rgs, k)
+			}
+			log.Info("DropCredentialsRG in db",
+				zap.String("username", credentialInfo.Username),
+				zap.String("EncryptedPassword", credentialInfo.EncryptedPassword),
+				zap.String("delete resource group", rg), zap.Strings("remaining resource groups", rgs))
+		}
+
+		err = kc.Txn.Save(k, string(credentialValue))
+		if err != nil {
+			log.Error("update credential rgs persist meta fail", zap.String("key", k), zap.Error(err))
+			return err
+		}
+	}
 	return nil
 }
 
@@ -880,9 +984,46 @@ func (kc *Catalog) getRolesByUsername(tenant string, username string) ([]string,
 	return roles, nil
 }
 
+func (kc *Catalog) getRGsByUsername(tenant string, username string) ([]string, error) {
+	var rgs []string
+	k := fmt.Sprintf("%s/%s", CredentialPrefix, username)
+	v, err := kc.Txn.Load(k)
+	if err != nil {
+		if common.IsKeyNotExistError(err) {
+			log.Debug("not found the user", zap.String("key", k))
+		} else {
+			log.Warn("get credential meta fail", zap.String("key", k), zap.Error(err))
+		}
+		return nil, err
+	}
+
+	credentialInfo := internalpb.CredentialInfo{}
+	err = json.Unmarshal([]byte(v), &credentialInfo)
+	// compatible with milvus version, check whether ResourceGroups is empty
+	if credentialInfo.ResourceGroups != nil {
+		for rg := range credentialInfo.ResourceGroups {
+			rgs = append(rgs, rg)
+		}
+	}
+
+	return rgs, nil
+}
+
 // getUserResult get the user result by the username. And never return the error because the error means the user isn't added to a role.
 func (kc *Catalog) getUserResult(tenant string, username string, includeRoleInfo bool) (*milvuspb.UserResult, error) {
 	result := &milvuspb.UserResult{User: &milvuspb.UserEntity{Name: username}}
+
+	rgNames, err := kc.getRGsByUsername(tenant, username)
+	if err != nil {
+		log.Warn("fail to get resource groups by the username", zap.Error(err))
+		return result, err
+	}
+	var rgs []*milvuspb.ResourceGroupEntity
+	for _, rgName := range rgNames {
+		rgs = append(rgs, &milvuspb.ResourceGroupEntity{Name: rgName})
+	}
+	result.ResourceGroups = rgs
+
 	if !includeRoleInfo {
 		return result, nil
 	}

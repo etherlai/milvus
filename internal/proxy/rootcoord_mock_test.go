@@ -1103,11 +1103,19 @@ func (coord *RootCoordMock) CreateCredential(ctx context.Context, req *internalp
 	return &commonpb.Status{}, nil
 }
 
+func (coord *RootCoordMock) BindUserResourceGroups(ctx context.Context, req *internalpb.CredentialInfo) (*commonpb.Status, error) {
+	return &commonpb.Status{}, nil
+}
+
 func (coord *RootCoordMock) UpdateCredential(ctx context.Context, req *internalpb.CredentialInfo) (*commonpb.Status, error) {
 	return &commonpb.Status{}, nil
 }
 
 func (coord *RootCoordMock) DeleteCredential(ctx context.Context, req *milvuspb.DeleteCredentialRequest) (*commonpb.Status, error) {
+	return &commonpb.Status{}, nil
+}
+
+func (coord *RootCoordMock) DeleteUsersRG(ctx context.Context, req *internalpb.DeleteUsersRGRequest) (*commonpb.Status, error) {
 	return &commonpb.Status{}, nil
 }
 
